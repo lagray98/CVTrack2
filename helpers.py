@@ -4,6 +4,35 @@ import random
 from matplotlib import pyplot as plt
 
 
+def canny_mask(img):
+    img = cv2.GaussianBlur(img, (5, 5), 0)
+    img = cv2.Canny(img, 50, 150)
+
+    # defining a blank mask to start with
+    vertices = np.array([[(0, img.shape[0]),
+                          (0, img.shape[0]*0.6),
+                          (img.shape[1]*0.2, img.shape[0]*0.4),
+                          (img.shape[1]*0.8, img.shape[0]*0.4),
+                          (img.shape[1], img.shape[0]*0.6),
+                          (img.shape[1], img.shape[0])]],
+                        dtype=np.int32)
+    mask = np.zeros_like(img)
+
+    # defining a 3 channel or 1 channel color to fill the mask with depending on the input image
+    if len(img.shape) > 2:
+        channel_count = img.shape[2]  # i.e. 3 or 4 depending on your image
+        ignore_mask_color = (255,) * channel_count
+    else:
+        ignore_mask_color = 255
+
+    # filling pixels inside the polygon defined by "vertices" with the fill color
+    cv2.fillPoly(mask, vertices, ignore_mask_color)
+    # returning the image only where mask pixels are nonzero
+    masked_image = cv2.bitwise_and(img, mask)
+
+    return masked_image
+
+
 class LinedImage:
     """Class to add lines to an image"""
     def __init__(self, image):
@@ -143,3 +172,62 @@ class LinedImage:
     def save(self, name):
         cv2.imwrite('output/'+name+'_edges.png', self.edged_image)
         cv2.imwrite('output/'+name+'_lines.png', self.lined_image)
+
+
+def track_lanes(image):
+    y_min = image.shape[0]
+    y_max = int(image.shape[0] * 0.4)
+    x_mid = int(image.shape[1] / 2)
+    canny = canny_mask(image)
+    lines = cv2.HoughLinesP(canny, 1, np.pi/200, 4,
+                            minLineLength=y_min*0.2, maxLineGap=y_min*0.05)
+    if lines is None:
+        return image
+    lines = lines[0]
+    # for x1, y1, x2, y2 in lines:
+    #     if abs(y2 - y1) < 50: continue
+    #     cv2.line(image, (x1, y1), (x2, y2), (255, 0, 255), 5)
+    # return image
+    best_l, slope_l = 1000, 0
+    best_r, slope_r = 1000, 0
+    for x1, y1, x2, y2 in lines:
+        slope = (float(y2) - y1) / (x2 - x1)
+        print slope
+        if abs(slope) <= 1.5:
+            continue
+        if y_min - y1 < y_min*0.3 and x_mid - x1 < best_l:
+            slope_l, best_l = slope, x_mid - x1
+        if y_min - y2 < y_min*0.3 and x2 - x_mid < best_r:
+            slope_r, best_r = slope, x2 - x_mid
+    # Get the average lines of the two clusters
+    lx1, lx2, rx1, rx2 = [], [], [], []
+    for x1, y1, x2, y2 in lines:
+        if abs((float(y2) - y1) / (x2 - x1) - slope_l) < 0.2:
+            mc = np.polyfit([x1, x2], [y1, y2], 1)
+            lx1.append(np.int(np.float((y_min - mc[1])) / np.float(mc[0])))
+            lx2.append(np.int(np.float((y_max - mc[1])) / np.float(mc[0])))
+        elif abs((float(y2) - y1) / (x2 - x1) - slope_r) < 0.2:
+            mc = np.polyfit([x1, x2], [y1, y2], 1)
+            rx1.append(np.int(np.float((y_min - mc[1])) / np.float(mc[0])))
+            rx2.append(np.int(np.float((y_max - mc[1])) / np.float(mc[0])))
+    if len(lx1) == 0 or len(lx2) == 0 or len(rx1) == 0 or len(rx2) == 0:
+        return image
+    lx1_avg = np.int(np.nanmean(lx1))
+    lx2_avg = np.int(np.nanmean(lx2))
+    rx1_avg = np.int(np.nanmean(rx1))
+    rx2_avg = np.int(np.nanmean(rx2))
+    midx1_avg = (lx1_avg + rx1_avg) / 2
+    midx2_avg = (lx2_avg + rx2_avg) / 2
+    left = [(lx1_avg, y_min), (lx2_avg, y_max)]
+    right = [(rx1_avg, y_min), (rx2_avg, y_max)]
+    middle = [(midx1_avg, y_min), (midx2_avg, y_max)]
+    cv2.line(image, (left[0][0], left[0][1]), (left[1][0], left[1][1]), (255, 0, 255), 8)
+    cv2.line(image, (right[0][0], right[0][1]), (right[1][0], right[1][1]), (255, 0, 255), 8)
+    cv2.line(image, (middle[0][0], middle[0][1]), (middle[1][0], middle[1][1]), (0, 255, 0), 4)
+    return image
+    # return [(lx1_avg, y_min), (lx2_avg, y_max)], \
+    #        [(rx1_avg, y_min), (rx2_avg, y_max)], \
+    #        [(midx1_avg, y_min), (midx2_avg, y_max)]
+    # except:
+    #     return -1,-1,-1
+
