@@ -10,7 +10,7 @@ image = LinedImage(straight)
 image.set_canny(200, 255)
 image.set_hough(1, np.pi/180, 100)
 start = time.time()
-image.run(min_slope=50)
+image.run_avg(min_slope=50)
 # image.get_lines()
 print(time.time() - start)
 

@@ -36,20 +36,29 @@ class LinedImage:
         self.lines = cv2.HoughLinesP(self.edged_image, self.hough[0], self.hough[1], self.hough[2],
                                      minLineLength=self.image.shape[0]/3, maxLineGap=10)[0]
         self.lines = [line for line in self.lines if abs(line[3]-line[1]) >= min_slope]
-        avgslope = 0
-        for x1,y1,x2,y2 in self.lines:
-            avgslope += (y2-y1)/(x2-x1)
-        avgslope = avgslope / len(self.lines)
-        lx1,lx2, rx1, rx2 = [], [], [], []
         y_min = self.image.shape[0]
         y_max = int(self.image.shape[0] * 0.611)
+        x_mid = int(self.image.shape[1] / 2)
+
+        # Find the two line clusters on either side of the center
+        best_l, slope_l = 1000, 0
+        best_r, slope_r = 1000, 0
         for x1, y1, x2, y2 in self.lines:
-            if (y2-y1)/(x2-x1) < avgslope:
-                mc = np.polyfit([x1,x2], [y1, y2], 1)
+            slope = (float(y2)-y1)/(x2-x1)
+            if y_min-y1 < 10 and x_mid-x1 < best_l:
+                slope_l, best_l = slope, x_mid-x1
+            if y_min-y2 < 10 and x2-x_mid < best_r:
+                slope_r, best_r = slope, x2-x_mid
+
+        # Get the average lines of the two clusters
+        lx1, lx2, rx1, rx2 = [], [], [], []
+        for x1, y1, x2, y2 in self.lines:
+            if abs((float(y2)-y1)/(x2-x1) - slope_l) < 0.5:
+                mc = np.polyfit([x1, x2], [y1, y2], 1)
                 lx1.append(np.int(np.float((y_min - mc[1]))/np.float(mc[0])))
                 lx2.append(np.int(np.float((y_max - mc[1]))/np.float(mc[0])))
-            elif (y2-y1)/(x2-x1) > avgslope:
-                mc = np.polyfit([x1,x2],[y1,y2], 1)
+            elif abs((float(y2) - y1) / (x2 - x1) - slope_r) < 0.5:
+                mc = np.polyfit([x1, x2], [y1, y2], 1)
                 rx1.append(np.int(np.float((y_min - mc[1])) / np.float(mc[0])))
                 rx2.append(np.int(np.float((y_max - mc[1])) / np.float(mc[0])))
         lx1_avg = np.int(np.nanmean(lx1))
@@ -80,8 +89,9 @@ class LinedImage:
                                      minLineLength=self.image.shape[0]/3, maxLineGap=10)[0]
         for x1, y1, x2, y2 in self.lines:
             if abs(y2-y1) < min_slope: continue
-            cv2.line(self.lined_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.line(self.just_lines, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            color = random.randint(0,255)
+            cv2.line(self.lined_image, (x1, y1), (x2, y2), (color, color, color), 2)
+            cv2.line(self.just_lines, (x1, y1), (x2, y2), (color, color, color), 2)
 
     def get_lines(self):
         self.edged_image = cv2.Canny(self.image, self.canny[0], self.canny[1], apertureSize=self.canny[2])
