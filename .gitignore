@@ -1,0 +1,8 @@
+
+*.png
+
+images/
+
+output/
+
+\.idea/
