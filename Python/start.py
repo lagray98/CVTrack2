@@ -1,9 +1,8 @@
 from __future__ import division
 import cv2
-from helpers import LinedImage
 import numpy as np
 import time
-from helpers import track_lanes
+from helpers import *
 
 def still_image():
     straight = cv2.imread('images/track5.jpg', 0)
@@ -20,7 +19,7 @@ def still_image():
     image.display(only_lines=True)
     image.save('track_slant')
 
-if __name__ == '__main__':
+def video_lanes():
     cap = cv2.VideoCapture('videos/straight_short.mp4')
     ret, frame = cap.read()
     fourcc = cv2.cv.CV_FOURCC(*'SVQ3')
@@ -40,3 +39,6 @@ if __name__ == '__main__':
     cap.release()
     out.release()
     cv2.destroyAllWindows()
+
+if __name__ == '__main__':
+    stabilize('videos/straight.mp4')
