@@ -41,4 +41,4 @@ def video_lanes():
     cv2.destroyAllWindows()
 
 if __name__ == '__main__':
-    stabilize('videos/straight.mp4')
+    stabilize('videos/straight_short.mp4')

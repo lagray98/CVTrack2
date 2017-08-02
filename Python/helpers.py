@@ -6,10 +6,9 @@ from matplotlib import pyplot as plt
 
 def stabilize(file_name):
     cap = cv2.VideoCapture(file_name)
-    # output_video = cv2.VideoWriter('output_py.avi', cv2.cv.CV_FOURCC(*'SVQ3'), 10.0, (prev.shape[1], prev.shape[0]))
     # params for ShiTomasi corner detection
     feature_params = dict(maxCorners=200,
-                          qualityLevel=0.1,
+                          qualityLevel=0.01,
                           minDistance=20,
                           blockSize=10)
 
@@ -20,16 +19,17 @@ def stabilize(file_name):
 
     # Take first frame and find corners in it
     ret, old_frame = cap.read()
+    rows, cols, _ = old_frame.shape
+
+    output_video = cv2.VideoWriter('output_short.avi', cv2.cv.CV_FOURCC(*'SVQ3'), 10.0, (cols, rows))
+
     old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
     p0 = cv2.goodFeaturesToTrack(old_gray, mask=None, **feature_params)
-
-    # Create a mask image for drawing purposes
-    mask = np.zeros_like(old_frame)
 
     ret, frame = cap.read()
     shift_x = 0
     shift_y = 0
-    while (ret):
+    while ret:
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # calculate optical flow
         p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
@@ -47,12 +47,11 @@ def stabilize(file_name):
             x.append(c-a)
             y.append(d-b)
             cv2.circle(frame, (a,b), 3, 255, -1)
-        shift_x -= np.mean(x)
-        shift_y -= np.mean(y)
+        shift_x += np.mean(x)
+        shift_y += np.mean(y)
         M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
-        rows, cols, _ = frame.shape
-        output_frame = cv2.warpAffine(frame, M, dsize=(rows, cols))
-
+        output_frame = cv2.warpAffine(frame, M, dsize=(cols, rows))
+        output_video.write(output_frame)
         cv2.imshow('frame', output_frame)
         k = cv2.waitKey(30) & 0xff
         if k == 27:
@@ -64,9 +63,9 @@ def stabilize(file_name):
         # p0 = good_new.reshape(-1, 1, 2)
         ret, frame = cap.read()
 
-
     cv2.destroyAllWindows()
     cap.release()
+    output_video.release()
 
 
 def canny_mask(img):
