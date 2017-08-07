@@ -1,10 +1,12 @@
 import cv2
 import numpy as np
-import random
-from matplotlib import pyplot as plt
+
+BLUE_COLOR = (255, 0, 0)
+RED_COLOR = (0, 0, 255)
+GREEN_COLOR = (0, 255, 0)
 
 
-def stabilize(file_name):
+def stabilize(file_name, output_name):
     cap = cv2.VideoCapture(file_name)
     # params for ShiTomasi corner detection
     feature_params = dict(maxCorners=200,
@@ -21,7 +23,7 @@ def stabilize(file_name):
     ret, old_frame = cap.read()
     rows, cols, _ = old_frame.shape
 
-    output_video = cv2.VideoWriter('output_short.avi', cv2.cv.CV_FOURCC(*'SVQ3'), 10.0, (cols, rows))
+    output_video = cv2.VideoWriter(output_name, cv2.cv.CV_FOURCC(*'SVQ3'), 30.0, (cols, rows))
 
     old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
     p0 = cv2.goodFeaturesToTrack(old_gray, mask=None, **feature_params)
@@ -97,201 +99,113 @@ def canny_mask(img):
     return masked_image
 
 
-class LinedImage:
-    """Class to add lines to an image"""
-    def __init__(self, image):
-        self.image = image
-        self.edged_image = None
-        self.lined_image = None
-        self.just_lines = None
-        self.canny = [100, 250, 3]
-        self.hough = [1, np.pi/180, 200]
-        self.lines = []
+class LineCluster:
 
-    def set_canny(self, threshold1, threshold2, aperture_size=3):
-        """Set the Parameters for the Canny Edge Detection"""
-        self.canny = [threshold1, threshold2, aperture_size]
+    def __init__(self, y_min, y_max, (x1, y1), (x2, y2), allowed_error=5000):
+        # NOTE: slope_range percent difference
+        self.bottom_line, self.top_line = [], []
+        self.y_min = y_min
+        self.y_max = y_max
+        self.error = allowed_error
+        slope, intercept = np.polyfit([x1, x2], [y1, y2], 1)
+        self.bottom_line.append(np.int(np.float((self.y_min - intercept)) / np.float(slope)))
+        self.top_line.append(np.int(np.float((self.y_max - intercept)) / np.float(slope)))
 
-    def set_hough(self, rho, theta, threshold):
-        """Set the parameters for the Hough Line Transform"""
-        self.hough = [rho, theta, threshold]
-
-    def run_avg(self, min_slope=50):
-        """Run a Canny Edge Detection followed by a Hough Line Transform on the base image to create three images:
-            self.edged_image: cv2 image with just Canny Edge Detection
-            self.lined_image: base image with the lines from the Hough Line Transform overlaid
-            self.just_lines: cv2 image of just the lines
-        """
-        self.edged_image = cv2.Canny(self.image, self.canny[0], self.canny[1], apertureSize=self.canny[2])
-        self.just_lines = np.ones(self.image.shape, np.uint8)
-        self.lined_image = self.image.copy()
-        # self.lines = cv2.HoughLines(self.edged_image, 1, np.pi / 180, 200)
-        self.lines = cv2.HoughLinesP(self.edged_image, self.hough[0], self.hough[1], self.hough[2],
-                                     minLineLength=self.image.shape[0]/3, maxLineGap=10)[0]
-        self.lines = [line for line in self.lines if abs(line[3]-line[1]) >= min_slope]
-        y_min = self.image.shape[0]
-        y_max = int(self.image.shape[0] * 0.611)
-        x_mid = int(self.image.shape[1] / 2)
-
-        # Find the two line clusters on either side of the center
-        best_l, slope_l = 1000, 0
-        best_r, slope_r = 1000, 0
-        for x1, y1, x2, y2 in self.lines:
-            slope = (float(y2)-y1)/(x2-x1)
-            if y_min-y1 < 10 and x_mid-x1 < best_l:
-                slope_l, best_l = slope, x_mid-x1
-            if y_min-y2 < 10 and x2-x_mid < best_r:
-                slope_r, best_r = slope, x2-x_mid
-
-        # Get the average lines of the two clusters
-        lx1, lx2, rx1, rx2 = [], [], [], []
-        for x1, y1, x2, y2 in self.lines:
-            if abs((float(y2)-y1)/(x2-x1) - slope_l) < 0.5:
-                mc = np.polyfit([x1, x2], [y1, y2], 1)
-                lx1.append(np.int(np.float((y_min - mc[1]))/np.float(mc[0])))
-                lx2.append(np.int(np.float((y_max - mc[1]))/np.float(mc[0])))
-            elif abs((float(y2) - y1) / (x2 - x1) - slope_r) < 0.5:
-                mc = np.polyfit([x1, x2], [y1, y2], 1)
-                rx1.append(np.int(np.float((y_min - mc[1])) / np.float(mc[0])))
-                rx2.append(np.int(np.float((y_max - mc[1])) / np.float(mc[0])))
-        lx1_avg = np.int(np.nanmean(lx1))
-        lx2_avg = np.int(np.nanmean(lx2))
-        rx1_avg = np.int(np.nanmean(rx1))
-        rx2_avg = np.int(np.nanmean(rx2))
-        midx1_avg = (lx1_avg+rx1_avg) / 2
-        midx2_avg = (lx2_avg+rx2_avg) / 2
-
-        cv2.line(self.lined_image, (lx1_avg, y_min), (lx2_avg, y_max), (0, 0, 255), 2)
-        cv2.line(self.just_lines, (lx1_avg, y_min), (lx2_avg, y_max), (0, 0, 255), 2)
-        cv2.line(self.lined_image, (rx1_avg, y_min), (rx2_avg, y_max), (0, 0, 255), 2)
-        cv2.line(self.just_lines, (rx1_avg, y_min), (rx2_avg, y_max), (0, 0, 255), 2)
-        cv2.line(self.lined_image, (midx1_avg, y_min), (midx2_avg, y_max), (0, 0, 255), 4)
-        cv2.line(self.just_lines, (midx1_avg, y_min), (midx2_avg, y_max), (0, 0, 255), 4)
-
-    def run(self, min_slope=50):
-        """Run a Canny Edge Detection followed by a Hough Line Transform on the base image to create three images:
-            self.edged_image: cv2 image with just Canny Edge Detection
-            self.lined_image: base image with the lines from the Hough Line Transform overlaid
-            self.just_lines: cv2 image of just the lines
-        """
-        self.edged_image = cv2.Canny(self.image, self.canny[0], self.canny[1], apertureSize=self.canny[2])
-        self.just_lines = np.ones(self.image.shape, np.uint8)
-        self.lined_image = self.image.copy()
-        # self.lines = cv2.HoughLines(self.edged_image, 1, np.pi / 180, 200)
-        self.lines = cv2.HoughLinesP(self.edged_image, self.hough[0], self.hough[1], self.hough[2],
-                                     minLineLength=self.image.shape[0]/3, maxLineGap=10)[0]
-        for x1, y1, x2, y2 in self.lines:
-            if abs(y2-y1) < min_slope: continue
-            color = random.randint(0,255)
-            cv2.line(self.lined_image, (x1, y1), (x2, y2), (color, color, color), 2)
-            cv2.line(self.just_lines, (x1, y1), (x2, y2), (color, color, color), 2)
-
-    def get_lines(self):
-        self.edged_image = cv2.Canny(self.image, self.canny[0], self.canny[1], apertureSize=self.canny[2])
-        # self.lines = cv2.HoughLines(self.edged_image, 1, np.pi / 180, 200)
-        self.lines = cv2.HoughLinesP(self.edged_image, self.hough[0], self.hough[1], self.hough[2],
-                                     minLineLength=self.image.shape[0]/3, maxLineGap=10)[0]
-        avgslope = 0
-        for x1,y1,x2,y2 in self.lines:
-            if abs(y2-y1) < 50: continue
-            avgslope += (y2-y1)/(x2-x1)
-        avgslope = avgslope / len(self.lines)
-        lx1,lx2, rx1, rx2 = [], [], [], []
-        y_min = self.image.shape[0]
-        y_max = int(self.image.shape[0] * 0.611)
-        for x1, y1, x2, y2 in self.lines:
-            if (y2-y1)/(x2-x1) < avgslope:
-                mc = np.polyfit([x1,x2], [y1, y2], 1)
-                lx1.append(np.int(np.float((y_min - mc[1]))/np.float(mc[0])))
-                lx2.append(np.int(np.float((y_max - mc[1]))/np.float(mc[0])))
-            elif (y2-y1)/(x2-x1) > avgslope:
-                mc = np.polyfit([x1,x2],[y1,y2], 1)
-                rx1.append(np.int(np.float((y_min - mc[1])) / np.float(mc[0])))
-                rx2.append(np.int(np.float((y_max - mc[1])) / np.float(mc[0])))
-        lx1_avg = np.int(np.nanmean(lx1))
-        lx2_avg = np.int(np.nanmean(lx2))
-        rx1_avg = np.int(np.nanmean(rx1))
-        rx2_avg = np.int(np.nanmean(rx2))
-        midx1_avg = (lx1_avg+rx1_avg) / 2
-        midx2_avg = (lx2_avg+rx2_avg) / 2
-        return [(lx1_avg, y_min), (lx2_avg, y_max)], [(rx1_avg, y_min), (rx2_avg, y_max)], [(midx1_avg, y_min), (midx2_avg, y_max)]
-
-    def display(self, only_lines=True):
-        """Displays either the original image, Canny Edge image, and Hough Line image or
-         just the Hough Line image and Hough lines on a white background using matplotlib"""
-        if not only_lines:
-            plt.subplot(3, 1, 1), plt.imshow(self.image, cmap='gray')
-            plt.title('Original Image'), plt.xticks([]), plt.yticks([])
-            plt.subplot(3, 1, 2), plt.imshow(self.edged_image, cmap='gray')
-            plt.title('Edged Image'), plt.xticks([]), plt.yticks([])
-            plt.title('Lined Image'), plt.xticks([]), plt.yticks([])
-            plt.subplot(3, 1, 3), plt.imshow(self.lined_image, cmap='gray')
+    def check_append(self, (x1, y1), (x2, y2)):
+        slope, intercept = np.polyfit([x1, x2], [y1, y2], 1)
+        bottom_x = np.int(np.float((self.y_min - intercept)) / np.float(slope))
+        top_x = np.int(np.float((self.y_max - intercept)) / np.float(slope))
+        mse = (np.square(np.abs(np.mean(self.bottom_line) - bottom_x))
+               + np.square(np.abs(np.mean(self.top_line) - top_x))) / 2
+        if mse < self.error:
+            self.bottom_line.append(bottom_x)
+            self.top_line.append(top_x)
+            return True
         else:
-            plt.subplot(1, 2, 1), plt.imshow(self.just_lines, cmap='gray')
-            plt.title('Lines Only'), plt.xticks([]), plt.yticks([])
-            plt.subplot(1, 2, 2), plt.imshow(self.lined_image, cmap='gray')
-            plt.title('Lined Image'), plt.xticks([]), plt.yticks([])
-        plt.show()
+            return False
 
-    def save(self, name):
-        cv2.imwrite('output/'+name+'_edges.png', self.edged_image)
-        cv2.imwrite('output/'+name+'_lines.png', self.lined_image)
+    def get_line(self):
+        return (np.int(np.nanmean(self.bottom_line)), self.y_min), (np.int(np.nanmean(self.top_line)), self.y_max)
+
+    def bottom_x(self):
+        return np.int(np.mean(self.bottom_line))
+
+    def top_x(self):
+        return np.int(np.mean(self.top_line))
+
+
+def trace_lines(image, lines, color=BLUE_COLOR):
+    for line in lines:
+        if len(line) == 2:
+            x1, y1, x2, y2 = line[0][0], line[0][1], line[1][0], line[1][1]
+        elif len(line) == 4:
+            x1, y1, x2, y2 = line
+        else:
+            return
+        if abs(y2 - y1) < 50:
+            continue
+        cv2.line(image, (x1, y1), (x2, y2), color, 5)
+    return image
+
+
+def average_line_variable_cluster(lines, bounds):
+    clusters = []
+    for x1, y1, x2, y2 in lines:
+        if y2-y1 == 0:
+            continue
+        if x2-x1 == 0:
+            x2 -= 1
+
+        check = False
+        for cluster in clusters:
+            # Difference in slope < 0.2 and difference in intercept < 10% of cluster's intercept
+            if cluster.check_append((x1, y1), (x2, y2)):
+                check = True
+                break
+        if not check:
+            new_cluster = LineCluster(bounds[1], bounds[3], (x1, y1), (x2, y2))
+            clusters.append(new_cluster)
+
+    # return [cluster.get_line() for cluster in clusters]
+    return clusters
 
 
 def track_lanes(image):
     y_min = image.shape[0]
     y_max = int(image.shape[0] * 0.4)
-    x_mid = int(image.shape[1] / 2)
+    x_min = 0
+    x_max = image.shape[1]
     canny = canny_mask(image)
     lines = cv2.HoughLinesP(canny, 1, np.pi/200, 4,
                             minLineLength=y_min*0.2, maxLineGap=y_min*0.05)
     if lines is None:
         return image
     lines = lines[0]
-    # for x1, y1, x2, y2 in lines:
-    #     if abs(y2 - y1) < 50: continue
-    #     cv2.line(image, (x1, y1), (x2, y2), (255, 0, 255), 5)
-    # return image
-    best_l, slope_l = 1000, 0
-    best_r, slope_r = 1000, 0
-    for x1, y1, x2, y2 in lines:
-        slope = (float(y2) - y1) / (x2 - x1)
-        print slope
-        if abs(slope) <= 1.5:
-            continue
-        if y_min - y1 < y_min*0.3 and x_mid - x1 < best_l:
-            slope_l, best_l = slope, x_mid - x1
-        if y_min - y2 < y_min*0.3 and x2 - x_mid < best_r:
-            slope_r, best_r = slope, x2 - x_mid
-    # Get the average lines of the two clusters
-    lx1, lx2, rx1, rx2 = [], [], [], []
-    for x1, y1, x2, y2 in lines:
-        if abs((float(y2) - y1) / (x2 - x1) - slope_l) < 0.2:
-            mc = np.polyfit([x1, x2], [y1, y2], 1)
-            lx1.append(np.int(np.float((y_min - mc[1])) / np.float(mc[0])))
-            lx2.append(np.int(np.float((y_max - mc[1])) / np.float(mc[0])))
-        elif abs((float(y2) - y1) / (x2 - x1) - slope_r) < 0.2:
-            mc = np.polyfit([x1, x2], [y1, y2], 1)
-            rx1.append(np.int(np.float((y_min - mc[1])) / np.float(mc[0])))
-            rx2.append(np.int(np.float((y_max - mc[1])) / np.float(mc[0])))
-    if len(lx1) == 0 or len(lx2) == 0 or len(rx1) == 0 or len(rx2) == 0:
-        return image
-    lx1_avg = np.int(np.nanmean(lx1))
-    lx2_avg = np.int(np.nanmean(lx2))
-    rx1_avg = np.int(np.nanmean(rx1))
-    rx2_avg = np.int(np.nanmean(rx2))
-    midx1_avg = (lx1_avg + rx1_avg) / 2
-    midx2_avg = (lx2_avg + rx2_avg) / 2
-    left = [(lx1_avg, y_min), (lx2_avg, y_max)]
-    right = [(rx1_avg, y_min), (rx2_avg, y_max)]
-    middle = [(midx1_avg, y_min), (midx2_avg, y_max)]
-    cv2.line(image, (left[0][0], left[0][1]), (left[1][0], left[1][1]), (255, 0, 255), 8)
-    cv2.line(image, (right[0][0], right[0][1]), (right[1][0], right[1][1]), (255, 0, 255), 8)
-    cv2.line(image, (middle[0][0], middle[0][1]), (middle[1][0], middle[1][1]), (0, 255, 0), 4)
-    return image
-    # return [(lx1_avg, y_min), (lx2_avg, y_max)], \
-    #        [(rx1_avg, y_min), (rx2_avg, y_max)], \
-    #        [(midx1_avg, y_min), (midx2_avg, y_max)]
-    # except:
-    #     return -1,-1,-1
+    clustered_lines = average_line_variable_cluster(lines, (x_min, y_min, x_max, y_max))
 
+    x_mid = np.int(np.float(x_max) / 2)
+    r_line, rx = None, float("Inf")
+    l_line, lx = None, float("-Inf")
+    for line in clustered_lines:
+        x_dist = (x_mid - line.bottom_x()) + (x_mid - line.top_x())
+        if rx > x_dist > 0:
+            r_line, rx = line, x_dist
+        elif 0 > x_dist > lx:
+            l_line, lx = line, x_dist
+    r_line = r_line.get_line()
+    l_line = l_line.get_line()
+    base_mid = (r_line[0][0] + l_line[0][0])/2.0
+    base_width = r_line[0][0] - l_line[0][0]
+    deviation = (x_mid - base_mid) / base_width
+
+    if deviation < 0:
+        print "Too Far Right: ", deviation,"%"
+    elif deviation > 0:
+        print "Too Far Left: ", deviation, "%"
+    else:
+        print "Correct"
+    mid_line = [((r_line[0][0] + l_line[0][0])/2, (r_line[0][1] + l_line[0][1])/2),((r_line[1][0]+l_line[1][0])/2, (r_line[1][1] + l_line[1][1])/2)]
+    user_line = [(x_mid, y_min), mid_line[1]]
+    image = trace_lines(image, [mid_line], color=GREEN_COLOR)
+    image = trace_lines(image, [user_line], color=BLUE_COLOR)
+    return trace_lines(image, [r_line, l_line], color=RED_COLOR)

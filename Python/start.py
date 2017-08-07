@@ -1,44 +1,56 @@
 from __future__ import division
-import cv2
-import numpy as np
 import time
 from helpers import *
+from LaneTracker import LaneTracker
 
-def still_image():
-    straight = cv2.imread('images/track5.jpg', 0)
-    slant = cv2.imread('images/track_slant_resize.png', 0)
 
-    image = LinedImage(straight)
-    image.set_canny(200, 255)
-    image.set_hough(1, np.pi / 180, 100)
-    start = time.time()
-    image.run_avg(min_slope=50)
-    # image.get_lines()
-    print(time.time() - start)
+# def video_lanes():
+#     cap = cv2.VideoCapture('videos/overcorrect_left.mp4')
+#     ret, frame = cap.read()
+#     fourcc = cv2.cv.CV_FOURCC(*'SVQ3')
+#     out = cv2.VideoWriter('overcorrect_left_output.avi', fourcc, 30.0, (frame.shape[1], frame.shape[0]))
+#     while cap.isOpened():
+#         ret, frame = cap.read()
+#         if ret:
+#             lined_frame = frame.copy()
+#             lined_frame = track_lanes(lined_frame)
+#             out.write(lined_frame)
+#             cv2.imshow('lines', lined_frame)
+#             if cv2.waitKey(1) & 0xFF == ord('q'):
+#                 break
+#         else:
+#             break
+#
+#     cap.release()
+#     out.release()
+#     cv2.destroyAllWindows()
+#
 
-    image.display(only_lines=True)
-    image.save('track_slant')
+def stabilizer():
+    stabilize('videos/straight_walk.mp4','output_video.avi')
 
-def video_lanes():
-    cap = cv2.VideoCapture('videos/straight_short.mp4')
+
+if __name__ == '__main__':
+    cap = cv2.VideoCapture('videos/stray_right.mp4')
     ret, frame = cap.read()
-    fourcc = cv2.cv.CV_FOURCC(*'SVQ3')
-    out = cv2.VideoWriter('output_py.avi', fourcc, 10.0, (frame.shape[1], frame.shape[0]))
+    out = cv2.VideoWriter('right_polygon.avi', cv2.cv.CV_FOURCC(*'SVQ3'), 30.0, (frame.shape[1], frame.shape[0]))
+    tracker = LaneTracker(frame.shape[0], frame.shape[0] * 0.4)
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
-            lined_frame = frame.copy()
-            lined_frame = track_lanes(lined_frame)
-            out.write(lined_frame)
-            cv2.imshow('lines', lined_frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            tracker.step(frame)
+            polygon = tracker.polygon()
+            polygon = polygon.reshape((-1, 1, 2))
+            overlay = frame.copy()
+            cv2.fillPoly(overlay, [polygon], GREEN_COLOR)
+            # cv2.polylines(frame, [polygon], True, (0, 0, 255), thickness=3)
+            frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0)
+            cv2.imshow('track', frame)
+            out.write(frame)
+            k = cv2.waitKey(10) & 0xff
+            if k == 27:
                 break
-        else:
-            break
 
+    cv2.destroyAllWindows()
     cap.release()
     out.release()
-    cv2.destroyAllWindows()
-
-if __name__ == '__main__':
-    stabilize('videos/straight_short.mp4')
