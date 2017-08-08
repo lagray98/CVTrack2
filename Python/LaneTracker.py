@@ -35,8 +35,8 @@ class LaneTracker:
         # Add a mask to ignore non-track lines
         vertices = np.array([[(0, canny_image.shape[0]),
                               (0, canny_image.shape[0] * 0.6),
-                              (canny_image.shape[1] * 0.2, canny_image.shape[0] * 0.4),
-                              (canny_image.shape[1] * 0.8, canny_image.shape[0] * 0.4),
+                              # (canny_image.shape[1] * 0.2, canny_image.shape[0] * 0.4),
+                              # (canny_image.shape[1] * 0.8, canny_image.shape[0] * 0.4),
                               (canny_image.shape[1], canny_image.shape[0] * 0.6),
                               (canny_image.shape[1], canny_image.shape[0])]],
                             dtype=np.int32)
@@ -103,3 +103,8 @@ class LaneTracker:
             if l_line is not None:
                 self.left_velocity = [self.left_x[0] - l_line.bottom_x(), self.left_x[1] - l_line.top_x()]
                 self.left_x = [l_line.bottom_x(), l_line.top_x()]
+
+            if r_line is None and l_line is not None:
+                self.right_x = [self.right_x[0] - self.left_velocity[0], self.right_x[1] - self.left_velocity[1]]
+            if l_line is None and r_line is not None:
+                self.left_x = [self.left_x[0] - self.right_velocity[0], self.left_x[1] - self.right_velocity[1]]
