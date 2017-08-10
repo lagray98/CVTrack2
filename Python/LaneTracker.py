@@ -4,28 +4,59 @@ from helpers import LineCluster
 
 
 class LaneTracker:
+    """
+    Class to track lanes over time in image
+    """
 
     def __init__(self, min_y, max_y):
+        """
+        Initialize new LaneTracker object
+        @param min_y: minimum y value of detected lanes
+        @type min_y: int
+        @param max_y: maximum y value of detected lanes
+        @type max_y: int
+        """
         self.min_y = min_y
         self.max_y = max_y
         self.left_x = None
         self.right_x = None
         self.left_velocity = [0, 0]
         self.right_velocity = [0, 0]
-        self.off_right = False
-        self.off_left = False
+        self.out_right = [False, False]
+        self.out_left = [False, False]
 
     def left_line(self):
+        """
+        Returns left side of the tracked lane
+        @return: Line indicating the left of the lane
+        @rtype: ((int, int), (int, int))
+        """
         return (self.left_x[0], self.min_y), (self.left_x[1], self.max_y)
 
     def right_line(self):
+        """
+        Returns right side of the tracked lane
+        @return: Line indicating the right of the lane
+        @rtype: ((int, int), (int, int))
+        """
         return (self.right_x[0], self.min_y), (self.right_x[1], self.max_y)
 
     def polygon(self):
+        """
+        Returns a polygon indicating the tracked lane
+        @return: Four points indicating polygon's vertices
+        @rtype: ((int, int), (int, int), (int, int), (int, int))
+        """
         return np.array([[self.left_x[0], self.min_y], [self.left_x[1], self.max_y],
                          [self.right_x[1], self.max_y], [self.right_x[0], self.min_y]], np.int32)
 
     def step(self, image):
+        """
+        Updates the tracked lane with the next frame in the source video
+        @param image: Next frame of the video
+        @type image: Any
+        @return: None
+        """
         x_mid = np.int(np.float(image.shape[1])/2)
 
         # Find the edges of the image
@@ -86,16 +117,26 @@ class LaneTracker:
         else:
             r_line, r_dist = None, 5000
             l_line, l_dist = None, 5000
+            r_side, r_side_dist = None, float("Inf")
+            l_side, l_side_dist = None, float("Inf")
             for line in clusters:
                 r_error = (np.float(np.square(abs(self.right_x[0] - line.bottom_x())) +
                                     np.square(abs(self.right_x[1] - line.top_x()))))/2
                 l_error = (np.float(np.square(abs(self.left_x[0] - line.bottom_x())) +
                                     np.square(abs(self.left_x[1] - line.top_x()))))/2
+                r_dist = (np.float(np.square(abs(image.shape[0] - line.bottom_x())) +
+                                   np.square(abs(image.shape[0] - line.top_x()))))/2
+                l_dist = np.float(np.square(line.bottom_x()) + np.square(line.top_x()))/2
 
                 if r_error < r_dist:
                     r_line, r_dist = line, r_error
                 elif l_error < l_dist:
                     l_line, l_dist = line, l_error
+                elif r_dist < r_side_dist:
+                    r_side, r_side_dist = line, r_dist
+                elif l_dist < l_side_dist:
+                    l_side, l_side_dist = line, l_dist
+
             if r_line is not None:
                 self.right_velocity = [self.right_x[0] - r_line.bottom_x(), self.right_x[1] - r_line.top_x()]
                 self.right_x = [r_line.bottom_x(), r_line.top_x()]
@@ -103,6 +144,24 @@ class LaneTracker:
             if l_line is not None:
                 self.left_velocity = [self.left_x[0] - l_line.bottom_x(), self.left_x[1] - l_line.top_x()]
                 self.left_x = [l_line.bottom_x(), l_line.top_x()]
+
+                # if r_line is None:
+                #     if not (self.out_right[0] or self.out_right[1]):
+                #         prev_dist_r = (np.float(np.square(abs(image.shape[0] - self.right_x[0])) +
+                #                                 np.square(abs(image.shape[0] - self.right_x[1]))))/2
+                #         if prev_dist_r < 5000:
+                #             print "Dead End"
+
+                # if r_line is None: # Right line not found
+                #     if not (self.out_right[0] or self.out_right[1]): # It was not already off screen
+                #         prev_dist_r = (np.float(np.square(abs(image.shape[0] - self.right_x[0])) +
+                #                               np.square(abs(image.shape[0] - self.right_x[1]))))/2
+                #         prev_dist_l = (np.float(np.square(self.right_x[0]) +
+                #                               np.square(self.right_x[1])))/2
+                #         if prev_dist_r < 5000:
+                #             self.out_right = [False, True]
+                #         if prev_dist_l < 5000:
+                #             self.out_right = [True, False]
 
             if r_line is None and l_line is not None:
                 self.right_x = [self.right_x[0] - self.left_velocity[0], self.right_x[1] - self.left_velocity[1]]

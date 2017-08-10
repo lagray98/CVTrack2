@@ -7,6 +7,15 @@ GREEN_COLOR = (0, 255, 0)
 
 
 def stabilize(file_name, output_name):
+    """
+    Stabilizes input video, displays in window, and writes to output
+
+    @param file_name: input video file name
+    @type file_name: str
+    @param output_name: output video file name
+    @type output_name: str
+    """
+
     cap = cv2.VideoCapture(file_name)
     # params for ShiTomasi corner detection
     feature_params = dict(maxCorners=200,
@@ -71,6 +80,14 @@ def stabilize(file_name, output_name):
 
 
 def canny_mask(img):
+    """
+    Applies Canny Edge detection and masks relevant area of an image
+
+    @param img: image to alter
+    @type img: Any
+    @return: altered image
+    @rtype: Any
+    """
     img = cv2.GaussianBlur(img, (5, 5), 0)
     img = cv2.Canny(img, 50, 150)
 
@@ -100,8 +117,20 @@ def canny_mask(img):
 
 
 class LineCluster:
+    """
+    Cluster of similar lines
+    """
 
     def __init__(self, y_min, y_max, (x1, y1), (x2, y2), allowed_error=5000):
+        """
+        Initialize new LineCluster
+        @param y_min: Minimum y value for lines
+        @type y_min: int
+        @param y_max: Maximum y value for lines
+        @type y_max: int
+        @param allowed_error: Maximum squared distance between lines in the same cluster
+        @type allowed_error: int or float
+        """
         # NOTE: slope_range percent difference
         self.bottom_line, self.top_line = [], []
         self.y_min = y_min
@@ -111,7 +140,18 @@ class LineCluster:
         self.bottom_line.append(np.int(np.float((self.y_min - intercept)) / np.float(slope)))
         self.top_line.append(np.int(np.float((self.y_max - intercept)) / np.float(slope)))
 
-    def check_append(self, (x1, y1), (x2, y2)):
+    def check_append(self, point1, point2):
+        """
+        Check if new line is part of the cluster, then appends it if applicable
+        @param point1: First point of the new line
+        @type point1: (int, int)
+        @param point2: Second point of the new line
+        @type point2: (int, int)
+        @return: Boolean indicating if the new line has been included
+        @rtype: bool
+        """
+        x1, y1 = point1
+        x2, y2 = point2
         slope, intercept = np.polyfit([x1, x2], [y1, y2], 1)
         bottom_x = np.int(np.float((self.y_min - intercept)) / np.float(slope))
         top_x = np.int(np.float((self.y_max - intercept)) / np.float(slope))
@@ -125,16 +165,42 @@ class LineCluster:
             return False
 
     def get_line(self):
+        """
+        Returns the mean line of the cluster
+        @return: Tuple of two points indicating the mean line of the cluster
+        @rtype: ((int, int), (int, int))
+        """
         return (np.int(np.nanmean(self.bottom_line)), self.y_min), (np.int(np.nanmean(self.top_line)), self.y_max)
 
     def bottom_x(self):
+        """
+        Returns the x-coordinate of the bottom point of the mean line of the cluster
+        @return: X-coordinate of the bottom point of the mean line of the cluster
+        @rtype: int
+        """
         return np.int(np.mean(self.bottom_line))
 
     def top_x(self):
+        """
+        Returns the x-coordinate of the top point of the mean line of the cluster
+        @return: X-coordinate of the top point of the mean line of the cluster
+        @rtype: int
+        """
         return np.int(np.mean(self.top_line))
 
 
 def trace_lines(image, lines, color=BLUE_COLOR):
+    """
+    Traces lines over input image
+    @param image: Image to trace lines over
+    @type image: Any
+    @param lines: List of lines
+    @type lines: list of ((int, int), (int, int)) or list of (int, int, int, int)
+    @param color: Tuple indicating color of lines to be traced in form (r, g, b)
+    @type color: (int, int, int)
+    @return: Traced over image
+    @rtype: Any
+    """
     for line in lines:
         if len(line) == 2:
             x1, y1, x2, y2 = line[0][0], line[0][1], line[1][0], line[1][1]
@@ -149,6 +215,15 @@ def trace_lines(image, lines, color=BLUE_COLOR):
 
 
 def average_line_variable_cluster(lines, bounds):
+    """
+    Clusters lines into a variable number of clusters
+    @param lines: Lines to cluster
+    @type lines: list of (int, int, int, int)
+    @param bounds: Min and Max values for output lines (min_x, max_x, min_y, max_y)
+    @type bounds: (int, int, int, int)
+    @return: Clusters of lines
+    @rtype: list of LineCluster
+    """
     clusters = []
     for x1, y1, x2, y2 in lines:
         if y2-y1 == 0:
@@ -166,11 +241,17 @@ def average_line_variable_cluster(lines, bounds):
             new_cluster = LineCluster(bounds[1], bounds[3], (x1, y1), (x2, y2))
             clusters.append(new_cluster)
 
-    # return [cluster.get_line() for cluster in clusters]
     return clusters
 
 
 def track_lanes(image):
+    """
+    Finds left and right side of lane, middle of lane, and POV orientation in lane of image
+    @param image: image to process
+    @type image: Any
+    @return: Image with all lines traced over
+    @rtype: Any
+    """
     y_min = image.shape[0]
     y_max = int(image.shape[0] * 0.4)
     x_min = 0

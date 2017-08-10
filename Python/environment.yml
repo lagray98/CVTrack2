@@ -1,4 +1,4 @@
-name: charmOpenCV
+name: eyesFreeCV
 channels:
 - conda-forge
 - https://conda.binstar.org/menpo
@@ -35,5 +35,3 @@ dependencies:
 - opencv=2.4.11=py27_1
 - tbb=4.3_20141023=0
 - ffmpeg=2.8.6=0
-prefix: /Users/Mullan/anaconda/envs/charmOpenCV
-

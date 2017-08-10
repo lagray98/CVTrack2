@@ -31,9 +31,15 @@ def stabilizer():
 
 
 if __name__ == '__main__':
-    cap = cv2.VideoCapture('videos/overcorrect_left.mp4')
+    """
+    Overlays predicted track in input video and outputs to file and view window
+    """
+    input_file = 'videos/overcorrect_left.mp4' # Can be mp4 or avi
+    output_file = 'overcorrect_left_out.avi'
+
+    cap = cv2.VideoCapture(input_file)
     ret, frame = cap.read()
-    out = cv2.VideoWriter('overcorrect_left_out.avi', cv2.cv.CV_FOURCC(*'SVQ3'), 30.0, (frame.shape[1], frame.shape[0]))
+    out = cv2.VideoWriter(output_file, cv2.cv.CV_FOURCC(*'SVQ3'), 30.0, (frame.shape[1], frame.shape[0]))
     tracker = LaneTracker(frame.shape[0], frame.shape[0] * 0.4)
     while cap.isOpened():
         ret, frame = cap.read()
@@ -43,7 +49,6 @@ if __name__ == '__main__':
             polygon = polygon.reshape((-1, 1, 2))
             overlay = frame.copy()
             cv2.fillPoly(overlay, [polygon], GREEN_COLOR)
-            # cv2.polylines(frame, [polygon], True, (0, 0, 255), thickness=3)
             frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0)
             out.write(frame)
             cv2.imshow('track', frame)
