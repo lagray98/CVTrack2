@@ -1,7 +1,7 @@
 name: eyesFreeCV
 channels:
 - conda-forge
-- https://conda.binstar.org/menpo
+- https://conda.anaconda.org/menpo
 - menpo
 - anaconda-fusion
 - defaults

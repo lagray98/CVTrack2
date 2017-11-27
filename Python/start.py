@@ -2,6 +2,7 @@ from __future__ import division
 import time
 from helpers import *
 from LaneTracker import LaneTracker
+from detect_color import *
 
 
 # def video_lanes():
@@ -40,21 +41,29 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(input_file)
     ret, frame = cap.read()
     out = cv2.VideoWriter(output_file, cv2.cv.CV_FOURCC(*'SVQ3'), 30.0, (frame.shape[1], frame.shape[0]))
-    tracker = LaneTracker(frame.shape[0], frame.shape[0] * 0.4)
+    
+#    detectColor(frame)
+
+    tracker = LaneTracker(frame.shape[0], 0)
+#    tracker = LaneTracker(frame.shape[0], frame.shape[0] * 0.35)
+    # initialized with screen min and .35 * screen min for mask
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
+        
+
             tracker.step(frame)
-            polygon = tracker.polygon()
+            polygon = tracker.polygon() #print out polygon value before and after reshape
             polygon = polygon.reshape((-1, 1, 2))
             overlay = frame.copy()
-            cv2.fillPoly(overlay, [polygon], GREEN_COLOR)
-            frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0)
+            cv2.fillPoly(overlay, [polygon], GREEN_COLOR) #Green triangles to frame
+            frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0) #transparency
             out.write(frame)
             cv2.imshow('track', frame)
             k = cv2.waitKey(10) & 0xff
             if k == 27:
                 break
+            # Terminates program if k is pressed
 
     cv2.destroyAllWindows()
     cap.release()

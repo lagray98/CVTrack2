@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
 from helpers import LineCluster
+from detect_color import *
+from helpers import findAngle
+
 
 
 class LaneTracker:
@@ -49,6 +52,8 @@ class LaneTracker:
         """
         return np.array([[self.left_x[0], self.min_y], [self.left_x[1], self.max_y],
                          [self.right_x[1], self.max_y], [self.right_x[0], self.min_y]], np.int32) #converts to int array
+    
+    
 
     def step(self, image):
         """
@@ -58,40 +63,50 @@ class LaneTracker:
         @return: None
         """
         x_mid = np.int(np.float(image.shape[1])/2) #finds center of image
+        
 
         # Find the edges of the image
-        blurred_image = cv2.GaussianBlur(image, (5, 5), 0)
-        canny_image = cv2.Canny(blurred_image, 50, 150)
+        
+        color_masked_image = detectColor(image)
+        
+        cv2.imshow('colorMask',color_masked_image)
+#        cv2.waitKey(0)
+
+        blurred_image = cv2.GaussianBlur(color_masked_image, (5, 5), 0)
+        canny_image = cv2.Canny(blurred_image, 50, 150) #<type 'numpy.ndarray'>
+        
 
         # Add a mask to ignore non-track lines, sky
-        vertices = np.array([[(0, canny_image.shape[0]),
-                              (0, canny_image.shape[0] * 0.35),
-                              # (canny_image.shape[1] * 0.2, canny_image.shape[0] * 0.4),
-                              # (canny_image.shape[1] * 0.8, canny_image.shape[0] * 0.4),
-                              (canny_image.shape[1], canny_image.shape[0] * 0.35),
-                              (canny_image.shape[1], canny_image.shape[0])]],
-                            dtype=np.int32)
-        mask = np.zeros_like(canny_image)
-        
-        # mask different if black and white vs. color
-        if len(canny_image.shape) > 2:
-            channel_count = canny_image.shape[2]
-            ignore_mask_color = (255,) * channel_count
-        else:
-            ignore_mask_color = 255
-        cv2.fillPoly(mask, vertices, ignore_mask_color)
-        masked_image = cv2.bitwise_and(canny_image, mask)
-        
-        cv2.imshow('masked',masked_image)
-            
-        raw_input("Press enter to continue")
-        
+#        vertices = np.array([[(0, canny_image.shape[0]),
+#                              (0, canny_image.shape[0] * 0.35),
+#                              # (canny_image.shape[1] * 0.2, canny_image.shape[0] * 0.4),
+#                              # (canny_image.shape[1] * 0.8, canny_image.shape[0] * 0.4),
+#                              (canny_image.shape[1], canny_image.shape[0] * 0.35),
+#                              (canny_image.shape[1], canny_image.shape[0])]],
+#                            dtype=np.int32)
+#        mask = np.zeros_like(canny_image)
+#        
+#        # mask different if black and white vs. color
+#        if len(canny_image.shape) > 2:
+#            channel_count = canny_image.shape[2]
+#            ignore_mask_color = (255,) * channel_count
+#        else:
+#            ignore_mask_color = 255
+#        cv2.fillPoly(mask, vertices, ignore_mask_color)
+#        masked_image = cv2.bitwise_and(canny_image, mask) #<type 'numpy.ndarray'>
+
+
+        cv2.imshow('masked',canny_image)
+
+
+#        cv2.waitKey(0)
+
         
 
         # Find line clusters in image
         # Line length must be at least 20% of image
         # Max gap between 2 lines if 5% of image
-        lines = cv2.HoughLinesP(masked_image, 1, np.pi/200, 4, minLineLength=self.min_y*0.2, maxLineGap=self.min_y*0.05)
+        lines = cv2.HoughLinesP(canny_image, 1, np.pi/200, 4, minLineLength=self.min_y*0.35, maxLineGap=self.min_y*0.05) #Optimal for red mask: minLen= y*.25, maxGap = y*.05, black mask min len = 0.35
         if lines is None:
             # TODO handle no lines being found in image
             return None
@@ -115,13 +130,10 @@ class LaneTracker:
             cv2.line(image,(x1,y1),(x2,y2), (255,0,0),10)
                 
         cv2.imshow('track',image)
-        raw_input("Press enter to continue")
-        #cv2.destroyWindow('track2')
+#        cv2.waitKey(0)
 
-#            print("x1: " + str(x1))
-#            print("x2: " + str(x2))
-#            print("y1: " + str(y1))
-#            print("y2: " + str(y2))
+
+
 
         # Find the lane lines to the right and left of the runner, l_line and r_line ?
 #        if self.right_x is None:  # If no corners are set, set them all
@@ -139,20 +151,44 @@ class LaneTracker:
         if self.right_x is None:
             r_line, rx = None, float("-Inf")
             l_line, lx = None, float("Inf")
+#            for line in clusters:
+#                x_dist = x_mid - line.bottom_x()
+#                if rx <= x_dist < 0:
+#                    r_line, rx = line, x_dist
+#                elif 0 < x_dist <= lx:
+#                    l_line, lx = line, x_dist
+#            self.right_x = [r_line.bottom_x(), r_line.top_x()]
+#            self.left_x = [l_line.bottom_x(), l_line.top_x()]
+
+
+            rightLines = []
+            leftLines = []
+            
             for line in clusters:
+                print("Line top x: " + str(line.top_x()))
+                print("Line bottom x: " + str(line.bottom_x()))
+                
                 x_dist = x_mid - line.bottom_x()
-                if rx <= x_dist < 0:
-                    r_line, rx = line, x_dist
-                elif 0 < x_dist <= lx:
-                    l_line, lx = line, x_dist
-            self.right_x = [r_line.bottom_x(), r_line.top_x()]
-            self.left_x = [l_line.bottom_x(), l_line.top_x()]
+                print("X distance: " + str(x_dist) + "\n")
+                if x_dist < 0:
+                    rightLines.append(line)
+                elif 0 < x_dist:
+                    leftLines.append(line)
+            
+            for rightLine in rightLines:
+                for leftLine in leftLines:
+                    if (50 < findAngle([leftLine.bottom_x(),leftLine.top_x()],[rightLine.bottom_x(),rightLine.top_x()],self.min_y) < 60):
+                        r_line = rightLine
+                        l_line = leftLine
+                        self.right_x = [rightLine.bottom_x(), rightLine.top_x()]
+                        self.left_x = [leftLine.bottom_x(),leftLine.top_x()]
+
 
             cv2.line(image,(r_line.bottom_x(), int(self.min_y)), (r_line.top_x(), int(self.max_y)),(0,0,255),5)
             cv2.line(image,(l_line.bottom_x(), int(self.min_y)), (l_line.top_x(), int(self.max_y)),(0,0,255),5)
 
             cv2.imshow('track',image)
-            raw_input("Press enter to continue")
+#            cv2.waitKey(0)
 
 
         else:
@@ -181,26 +217,44 @@ class LaneTracker:
             r_line, rx = None, float("-Inf")
             l_line, lx = None, float("Inf")
             
+#            for line in clusters:
+#                print("Line top x: " + str(line.top_x()))
+#                print("Line bottom x: " + str(line.bottom_x()))
+#
+#                x_dist = x_mid - line.bottom_x()
+#                print("X distance: " + str(x_dist) + "\n")
+#                if rx <= x_dist < 0:
+#                    r_line, rx = line, x_dist
+#                elif 0 < x_dist <= lx:
+#                    l_line, lx = line, x_dist
+
+
+            rightLines = []
+            leftLines = []
+        
             for line in clusters:
-                print(str(line.top_x()))
-                print(str(line.bottom_x()))
+                print("Line top x: " + str(line.top_x()))
+                print("Line bottom x: " + str(line.bottom_x()))
                 
                 x_dist = x_mid - line.bottom_x()
-                if rx <= x_dist < 0:
-                    r_line, rx = line, x_dist
-                elif 0 < x_dist <= lx:
-                    l_line, lx = line, x_dist
-        
-        
-            self.right_x = [r_line.bottom_x(), r_line.top_x()]
-            self.left_x = [l_line.bottom_x(), l_line.top_x()]
+                print("X distance: " + str(x_dist) + "\n")
+                if x_dist < 0:
+                    rightLines.append(line)
+                elif 0 < x_dist:
+                    leftLines.append(line)
+                    
+            for rightLine in rightLines:
+                for leftLine in leftLines:
+                    if (50 < findAngle([leftLine.bottom_x(),leftLine.top_x()],[rightLine.bottom_x(),rightLine.top_x()],self.min_y) < 60):
+                        r_line = rightLine
+                        l_line = leftLine
 
-            cv2.line(image,(r_line.bottom_x(), int(self.min_y)), (r_line.top_x(), int(self.max_y)),(0,0,255),5)
-            cv2.line(image,(l_line.bottom_x(), int(self.min_y)), (l_line.top_x(), int(self.max_y)),(0,0,255),5)
 
-            cv2.imshow('track',image)
+            if r_line is not None and l_line is not None:
+                self.right_x = [r_line.bottom_x(), r_line.top_x()]
+                self.left_x = [l_line.bottom_x(), l_line.top_x()]
 
-            raw_input("Press enter to continue")
+
 
             if r_line is not None:
                 self.right_velocity = [self.right_x[0] - r_line.bottom_x(), self.right_x[1] - r_line.top_x()]
@@ -209,6 +263,7 @@ class LaneTracker:
             if l_line is not None:
                 self.left_velocity = [self.left_x[0] - l_line.bottom_x(), self.left_x[1] - l_line.top_x()]
                 self.left_x = [l_line.bottom_x(), l_line.top_x()]
+            
 
                 # if r_line is None:
                 #     if not (self.out_right[0] or self.out_right[1]):
@@ -233,8 +288,30 @@ class LaneTracker:
             if l_line is None and r_line is not None:
                 self.left_x = [self.left_x[0] - self.right_velocity[0], self.left_x[1] - self.right_velocity[1]]
 
-        print("Bottom Left x: " + str(self.left_x[0]))
-        print("Bottom Right x: " + str(self.right_x[0]) + "\n")
+
+            cv2.line(image,(self.right_x[0], int(self.min_y)), (self.right_x[1], int(self.max_y)),(0,0,255),5)
+            cv2.line(image,(self.left_x[0], int(self.min_y)), (self.left_x[1], int(self.max_y)),(0,0,255),5)
+            cv2.imshow('track',image)
+
+        topAngle = findAngle(self.left_x,self.right_x, self.min_y)
+        print("Top angle: " + str(topAngle))
+
+
+
+#        leftXDistance = self.left_x[1] - self.left_x[0]
+#        leftLineLength = np.sqrt(np.square(self.min_y)+ np.square(leftXDistance))
+#        leftAngle = math.asin(self.min_y/leftLineLength) * 180 / math.pi
+#        print("Left Angle: " + str(leftAngle))
+#
+#        rightXDistance = self.right_x[0] - self.right_x[1]
+#        rightLineLength = np.sqrt(np.square(self.min_y) + np.square(rightXDistance))
+#        rightAngle = math.asin(self.min_y/rightLineLength)*180 / math.pi
+#        print("Right Angle: " + str(rightAngle))
+#
+#        topAngle = 180 - leftAngle - rightAngle
+#        print("Top Angle: " + str(topAngle))
+
+
 
 
 #leftSlope = float(self.min_y - self.max_y) / float(self.left_x[1] - self.left_x[0])
@@ -243,6 +320,3 @@ class LaneTracker:
 #rightSlope = float(self.min_y - self.max_y) / float(self.right_x[1] - self.right_x[0])
 #print("Right Slope: " + str(rightSlope))
 
-
-#print("Right X: " + str(self.right_x))
-#print("Left X: " + str(self.left_x))

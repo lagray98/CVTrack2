@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import math
 
 BLUE_COLOR = (255, 0, 0)
 RED_COLOR = (0, 0, 255)
@@ -155,8 +156,8 @@ class LineCluster:
         slope, intercept = np.polyfit([x1, x2], [y1, y2], 1)
         bottom_x = np.int(np.float((self.y_min - intercept)) / np.float(slope))
         top_x = np.int(np.float((self.y_max - intercept)) / np.float(slope))
-        mse = (np.square(np.abs(np.mean(self.bottom_line) - bottom_x))
-               + np.square(np.abs(np.mean(self.top_line) - top_x))) / 2
+        mse = (np.square(np.abs(np.mean(self.bottom_line) - bottom_x))    #Should be square root, not divided by 2 ?
+               + np.square(np.abs(np.mean(self.top_line) - top_x)))/2
         if mse < self.error:
             self.bottom_line.append(bottom_x)
             self.top_line.append(top_x)
@@ -290,3 +291,20 @@ def track_lanes(image):
     image = trace_lines(image, [mid_line], color=GREEN_COLOR)
     image = trace_lines(image, [user_line], color=BLUE_COLOR)
     return trace_lines(image, [r_line, l_line], color=RED_COLOR)
+
+
+def findAngle(leftLine, rightLine, minY):
+    # [bottom x, top x]
+    leftXDistance = leftLine[1] - leftLine[0]
+    leftLineLength = np.sqrt(np.square(minY)+ np.square(leftXDistance))
+    leftAngle = math.asin(minY/leftLineLength) * 180 / math.pi
+#    print("Left Angle: " + str(leftAngle))
+
+    rightXDistance = rightLine[0] - rightLine[1]
+    rightLineLength = np.sqrt(np.square(minY) + np.square(rightXDistance))
+    rightAngle = math.asin(minY/rightLineLength)*180 / math.pi
+#    print("Right Angle: " + str(rightAngle))
+
+    topAngle = 180 - leftAngle - rightAngle
+#    print("Top Angle: " + str(topAngle))
+    return topAngle
