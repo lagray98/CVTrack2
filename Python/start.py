@@ -52,11 +52,17 @@ if __name__ == '__main__':
         if ret:
         
 
-            tracker.step(frame)
+            veering = tracker.step(frame)
             polygon = tracker.polygon() #print out polygon value before and after reshape
             polygon = polygon.reshape((-1, 1, 2))
             overlay = frame.copy()
-            cv2.fillPoly(overlay, [polygon], GREEN_COLOR) #Green triangles to frame
+            
+            
+            if (veering == 1):
+                cv2.fillPoly(overlay, [polygon], RED_COLOR)
+            else:
+                cv2.fillPoly(overlay, [polygon], GREEN_COLOR) #Green triangles to frame
+            
             frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0) #transparency
             out.write(frame)
             cv2.imshow('track', frame)

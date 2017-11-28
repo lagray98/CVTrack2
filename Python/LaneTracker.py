@@ -165,11 +165,11 @@ class LaneTracker:
             leftLines = []
             
             for line in clusters:
-                print("Line top x: " + str(line.top_x()))
-                print("Line bottom x: " + str(line.bottom_x()))
-                
+#                print("Line top x: " + str(line.top_x()))
+#                print("Line bottom x: " + str(line.bottom_x()))
+
                 x_dist = x_mid - line.bottom_x()
-                print("X distance: " + str(x_dist) + "\n")
+#                print("X distance: " + str(x_dist) + "\n")
                 if x_dist < 0:
                     rightLines.append(line)
                 elif 0 < x_dist:
@@ -186,6 +186,9 @@ class LaneTracker:
 
             cv2.line(image,(r_line.bottom_x(), int(self.min_y)), (r_line.top_x(), int(self.max_y)),(0,0,255),5)
             cv2.line(image,(l_line.bottom_x(), int(self.min_y)), (l_line.top_x(), int(self.max_y)),(0,0,255),5)
+            
+            print("Right bottom x: " + str(r_line.bottom_x()))
+            print("Left bottom x: " + str(l_line.bottom_x()))
 
             cv2.imshow('track',image)
 #            cv2.waitKey(0)
@@ -233,11 +236,11 @@ class LaneTracker:
             leftLines = []
         
             for line in clusters:
-                print("Line top x: " + str(line.top_x()))
-                print("Line bottom x: " + str(line.bottom_x()))
-                
+#                print("Line top x: " + str(line.top_x()))
+#                print("Line bottom x: " + str(line.bottom_x()))
+
                 x_dist = x_mid - line.bottom_x()
-                print("X distance: " + str(x_dist) + "\n")
+#                print("X distance: " + str(x_dist) + "\n")
                 if x_dist < 0:
                     rightLines.append(line)
                 elif 0 < x_dist:
@@ -291,27 +294,17 @@ class LaneTracker:
 
             cv2.line(image,(self.right_x[0], int(self.min_y)), (self.right_x[1], int(self.max_y)),(0,0,255),5)
             cv2.line(image,(self.left_x[0], int(self.min_y)), (self.left_x[1], int(self.max_y)),(0,0,255),5)
+            
+#            print("Right bottom x: " + str(self.right_x[0]))
+#            print("Left bottom x: " + str(self.left_x[0]))
             cv2.imshow('track',image)
+#            cv2.waitKey(0)
 
-        topAngle = findAngle(self.left_x,self.right_x, self.min_y)
-        print("Top angle: " + str(topAngle))
-
-
-
-#        leftXDistance = self.left_x[1] - self.left_x[0]
-#        leftLineLength = np.sqrt(np.square(self.min_y)+ np.square(leftXDistance))
-#        leftAngle = math.asin(self.min_y/leftLineLength) * 180 / math.pi
-#        print("Left Angle: " + str(leftAngle))
-#
-#        rightXDistance = self.right_x[0] - self.right_x[1]
-#        rightLineLength = np.sqrt(np.square(self.min_y) + np.square(rightXDistance))
-#        rightAngle = math.asin(self.min_y/rightLineLength)*180 / math.pi
-#        print("Right Angle: " + str(rightAngle))
-#
-#        topAngle = 180 - leftAngle - rightAngle
-#        print("Top Angle: " + str(topAngle))
-
-
+        if(self.right_x[0] < 110 or self.left_x[0] > 35):
+            print("VEERING")
+            return 1
+        return 0
+#        topAngle = findAngle(self.left_x,self.right_x, self.min_y)
 
 
 #leftSlope = float(self.min_y - self.max_y) / float(self.left_x[1] - self.left_x[0])
